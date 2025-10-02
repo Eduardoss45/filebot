@@ -1,0 +1,27 @@
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap");
+
+body {
+  font-family: "Poppins", sans-serif;
+  background-color: #f8f9fa;
+}
+
+.container {
+  max-width: 800px;
+}
+
+.card {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 0.5rem;
+}
+
+.form-check-input:disabled ~ .form-control {
+  background-color: #e9ecef;
+  opacity: 0.7;
+}
+
+#status-message {
+  white-space: pre-wrap;
+  font-family: monospace;
+  background-color: #343a40;
+  color: #f8f9fa;
+}
