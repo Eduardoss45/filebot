@@ -1,7 +1,7 @@
 const { app } = require('electron');
 const path = require('path');
 const fse = require('fs-extra');
-const logger = require('./logger').logger;
+const { logger } = require('./logger');
 
 const dbPath = path.join(app.getPath('userData'), 'filebot.sqlite');
 
@@ -16,6 +16,8 @@ const knex = require('knex')({
 // Function to initialize the database schema
 const initializeDatabase = async () => {
   try {
+    // Create the 'folders' table if it doesn't exist.
+    // This table stores the configuration for each monitored folder.
     const hasFoldersTable = await knex.schema.hasTable('folders');
     if (!hasFoldersTable) {
       await knex.schema.createTable('folders', (table) => {
@@ -30,6 +32,8 @@ const initializeDatabase = async () => {
       logger.info('Tabela "folders" criada com sucesso.');
     }
 
+    // Create the 'history' table if it doesn't exist.
+    // This table logs all file operations performed by the application.
     const hasHistoryTable = await knex.schema.hasTable('history');
     if (!hasHistoryTable) {
         await knex.schema.createTable('history', (table) => {
@@ -43,6 +47,18 @@ const initializeDatabase = async () => {
             table.text('details');
         });
         logger.info('Tabela "history" criada com sucesso.');
+    }
+
+    // Create the 'recent_paths' table if it doesn't exist.
+    // This table stores the paths of recently used folders for quick access.
+    const hasRecentPathsTable = await knex.schema.hasTable('recent_paths');
+    if (!hasRecentPathsTable) {
+        await knex.schema.createTable('recent_paths', (table) => {
+            table.increments('id').primary();
+            table.string('path').unique().notNullable();
+            table.timestamp('last_used').defaultTo(knex.fn.now());
+        });
+        logger.info('Tabela "recent_paths" criada com sucesso.');
     }
   } catch (error) {
     logger.error('Erro ao inicializar o banco de dados:', error);
@@ -61,6 +77,19 @@ const getFolderById = (id) => knex('folders').where({ id }).first();
 // --- History Operations ---
 const addHistory = (entry) => knex('history').insert(entry);
 const getHistory = () => knex('history').orderBy('timestamp', 'desc').limit(200);
+
+// --- Recent Paths Operations ---
+const addRecentPath = async (path) => {
+    try {
+        await knex('recent_paths')
+            .insert({ path, last_used: new Date() })
+            .onConflict('path')
+            .merge({ last_used: new Date() });
+    } catch (error) {
+        logger.error(`Erro ao adicionar caminho recente ${path}:`, error);
+    }
+};
+const getRecentPaths = () => knex('recent_paths').orderBy('last_used', 'desc').limit(10).select('path');
 
 
 // --- Backup and Restore ---
@@ -118,4 +147,6 @@ module.exports = {
   getHistory,
   backupDatabase,
   restoreDatabase,
+  addRecentPath,
+  getRecentPaths,
 };

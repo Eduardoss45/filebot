@@ -1,0 +1,9 @@
+{
+  "id": "4a8d8710-2c93-4139-8b75-31d5d7db5cac",
+  "name": "teste",
+  "from": "C:\\Users\\gilgi\\OneDrive\\Documentos\\pasta_b",
+  "to": "C:\\Users\\gilgi\\OneDrive\\Documentos\\pasta_a",
+  "rule": "{\"criteria\":\"extension\",\"value\":\".txt\"}",
+  "ignore": "[object Object]",
+  "monitoring": 1
+}

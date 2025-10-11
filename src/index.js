@@ -39,6 +39,20 @@ app.whenReady().then(async () => {
 
   createWindow();
 
+  // Automatically restart monitoring for folders that were active on last close.
+  try {
+    const foldersToMonitor = await db.getFolders();
+    const activeFolders = foldersToMonitor.filter(f => f.monitoring);
+    if (activeFolders.length > 0) {
+      logger.info(`Restaurando monitoramento para ${activeFolders.length} pasta(s)...`);
+      activeFolders.forEach(folder => {
+        monitor.startMonitoring(folder);
+      });
+    }
+  } catch (error) {
+    logger.error('Erro ao restaurar o estado de monitoramento:', error);
+  }
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -55,7 +69,11 @@ app.on("window-all-closed", () => {
 // IPC Handlers
 ipcMain.handle("selecionar-pasta", async () => {
   const { filePaths } = await dialog.showOpenDialog({ properties: ["openDirectory"] });
-  return filePaths.length > 0 ? filePaths[0] : null;
+  if (filePaths.length > 0) {
+    await db.addRecentPath(filePaths[0]);
+    return filePaths[0];
+  }
+  return null;
 });
 
 ipcMain.handle('get-folders', () => db.getFolders());
@@ -89,13 +107,19 @@ ipcMain.handle('start-monitoring', async (event, folderId) => {
 
 ipcMain.handle('stop-monitoring', async (event, folderId) => {
     const result = monitor.stopMonitoring(folderId);
-    if (result.success) {
-        await db.updateFolder(folderId, { monitoring: false });
+    // Always update the database to ensure the state is correct, even if no watcher was active.
+    await db.updateFolder(folderId, { monitoring: false });
+
+    if (!result.success) {
+        // Log that no watcher was found, but don't treat it as a client-side error.
+        logger.warn(`Tentativa de parar monitoramento para ID ${folderId}, mas nenhum watcher estava ativo. O estado foi corrigido no banco de dados.`);
     }
-    return result;
+    // Return success because the desired state (stopped) is now correctly reflected in the database.
+    return { success: true, message: `Monitoramento para ID ${folderId} foi interrompido.` };
 });
 
 ipcMain.handle('get-history', () => db.getHistory());
+ipcMain.handle('get-recent-paths', () => db.getRecentPaths());
 
 ipcMain.handle('backup-database', async () => {
     const { filePath } = await dialog.showSaveDialog({
@@ -121,4 +145,53 @@ ipcMain.handle('restore-database', async () => {
         return db.restoreDatabase(filePaths[0]);
     }
     return { success: false, message: 'Restauração cancelada.' };
+});
+
+ipcMain.handle('export-folder-config', async (event, folderId) => {
+    const folder = await db.getFolderById(folderId);
+    if (!folder) {
+        return { success: false, message: 'Pasta não encontrada.' };
+    }
+
+    const { filePath } = await dialog.showSaveDialog({
+        title: 'Salvar Configuração da Pasta',
+        defaultPath: `filebot-folder-${folder.name}.json`,
+        filters: [{ name: 'JSON Files', extensions: ['json'] }]
+    });
+
+    if (filePath) {
+        try {
+            await require('fs').promises.writeFile(filePath, JSON.stringify(folder, null, 2));
+            return { success: true, path: filePath };
+        } catch (error) {
+            logger.error('Erro ao exportar configuração da pasta:', error);
+            return { success: false, message: error.message };
+        }
+    }
+    return { success: false, message: 'Exportação cancelada.' };
+});
+
+ipcMain.handle('import-folder-config', async () => {
+    const { filePaths } = await dialog.showOpenDialog({
+        title: 'Importar Configuração de Pasta',
+        filters: [{ name: 'JSON Files', extensions: ['json'] }],
+        properties: ['openFile']
+    });
+
+    if (filePaths && filePaths.length > 0) {
+        try {
+            const content = await require('fs').promises.readFile(filePaths[0], 'utf-8');
+            const folderConfig = JSON.parse(content);
+            
+            // Generate a new ID and ensure monitoring is off by default
+            const newFolder = { ...folderConfig, id: uuidv4(), monitoring: false };
+            
+            await db.addFolder(newFolder);
+            return { success: true, folder: newFolder };
+        } catch (error) {
+            logger.error('Erro ao importar configuração da pasta:', error);
+            return { success: false, message: error.message };
+        }
+    }
+    return { success: false, message: 'Importação cancelada.' };
 });

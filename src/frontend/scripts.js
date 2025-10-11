@@ -11,6 +11,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const historyTab = document.getElementById('history-tab');
   const backupBtn = document.getElementById('backup-btn');
   const restoreBtn = document.getElementById('restore-btn');
+  const recentFromBtn = document.getElementById('recent-from-btn');
+  const recentToBtn = document.getElementById('recent-to-btn');
+  const recentFromList = document.getElementById('recent-from-list');
+  const recentToList = document.getElementById('recent-to-list');
+  const importBtn = document.getElementById('import-btn');
 
   // --- State ---
   let folders = [];
@@ -39,6 +44,9 @@ document.addEventListener("DOMContentLoaded", () => {
           <button class="btn btn-danger btn-sm delete-btn" data-id="${folder.id}">
             <i class="bi bi-trash"></i> Excluir
           </button>
+          <button class="btn btn-info btn-sm export-btn" data-id="${folder.id}">
+            <i class="bi bi-box-arrow-up"></i> Exportar
+          </button>
         </div>
       `;
       folderListDiv.appendChild(folderItem);
@@ -66,6 +74,27 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   };
 
+  const renderRecentPaths = (paths, listElement, inputElement) => {
+    listElement.innerHTML = '';
+    if (paths.length === 0) {
+        listElement.innerHTML = '<li><a class="dropdown-item disabled" href="#">Nenhum caminho recente</a></li>';
+        return;
+    }
+    paths.forEach(p => {
+        const listItem = document.createElement('li');
+        const link = document.createElement('a');
+        link.className = 'dropdown-item';
+        link.href = '#';
+        link.textContent = p.path;
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            inputElement.value = p.path;
+        });
+        listItem.appendChild(link);
+        listElement.appendChild(listItem);
+    });
+  };
+
   // --- Data Loading ---
   const loadFolders = async () => {
     folders = await window.electronAPI.getFolders();
@@ -86,6 +115,16 @@ document.addEventListener("DOMContentLoaded", () => {
   selectToBtn.addEventListener("click", async () => {
     const path = await window.electronAPI.selecionarPasta();
     if (path) toPathInput.value = path;
+  });
+
+  recentFromBtn.addEventListener('click', async () => {
+    const recentPaths = await window.electronAPI.getRecentPaths();
+    renderRecentPaths(recentPaths, recentFromList, fromPathInput);
+  });
+
+  recentToBtn.addEventListener('click', async () => {
+    const recentPaths = await window.electronAPI.getRecentPaths();
+    renderRecentPaths(recentPaths, recentToList, toPathInput);
   });
 
   addFolderForm.addEventListener("submit", async (event) => {
@@ -131,6 +170,25 @@ document.addEventListener("DOMContentLoaded", () => {
         await window.electronAPI.removeFolder(folderId);
         loadFolders();
       }
+    }
+
+    if (button.classList.contains("export-btn")) {
+      const result = await window.electronAPI.exportFolderConfig(folderId);
+      if (result.success) {
+        alert(`Configuração exportada para: ${result.path}`);
+      } else {
+        alert(`Falha na exportação: ${result.message}`);
+      }
+    }
+  });
+
+  importBtn.addEventListener('click', async () => {
+    const result = await window.electronAPI.importFolderConfig();
+    if (result.success) {
+      alert(`Configuração "${result.folder.name}" importada com sucesso!`);
+      loadFolders();
+    } else if (result.message !== 'Importação cancelada.') {
+      alert(`Falha na importação: ${result.message}`);
     }
   });
 

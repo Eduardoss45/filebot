@@ -57,10 +57,13 @@ const moverArquivo = async (filePath, to, folderId) => {
   let details = '';
 
   try {
+    // If a file with the same name already exists in the destination,
+    // check if it's a duplicate. If so, delete the source file.
     if (await fse.pathExists(destinoInicial)) {
       if (await verificarEExcluirDuplicata(filePath, destinoInicial, folderId)) return; // Stop if duplicate was deleted
     }
 
+    // If the destination path already exists, find a new name by appending a number.
     let newPath = destinoInicial;
     let count = 1;
     while (await fse.pathExists(newPath)) {
@@ -68,14 +71,17 @@ const moverArquivo = async (filePath, to, folderId) => {
       count++;
     }
 
+    // If the file was renamed, update the status and details.
     if (newPath !== destinoInicial) {
         status = 'RENAMED_AND_MOVED';
         details = `Arquivo renomeado para ${path.basename(newPath)} para evitar conflito.`;
     }
 
+    // Move the file to the new path.
     await fse.move(filePath, newPath);
     logger.info(`🚀 Movendo ${fileName} para ${newPath}`);
 
+    // Add a record of the move to the history database.
     await db.addHistory({
         folderId,
         fileName: path.basename(newPath),
@@ -87,6 +93,7 @@ const moverArquivo = async (filePath, to, folderId) => {
 
   } catch (err) {
     logger.error(`🚨 Erro ao mover ${fileName}: ${err}`);
+    // If an error occurs, log it to the history database.
     await db.addHistory({
         folderId,
         fileName,
