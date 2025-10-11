@@ -1,257 +1,46 @@
-# Monitoramento automatico
+gemini prompt """
+Ajuste o sistema atual em Electron.js para incluir as seguintes especificações:
 
-Para ativar essa função devem ser enviados os seguintes dados:
+📁 **1. Gerenciamento de pastas monitoradas**
 
-exemplo para extenções:
-{
-    "from": "C:\Users\gilgi\OneDrive\Documentos\testes-filebot-api",
-    "to": "C:\Users\gilgi\OneDrive\Documentos\testes-filebot-api\html",
-    "extension": [".js"]
-}
+- Permitir ao usuário selecionar pastas e salvar seus caminhos.
+- Adicionar cada pasta às opções recentes.
+- Cada pasta deve ter configurações próprias salvas em JSON.
+- Permitir importação e exportação dessas configurações.
+- Limitar o monitoramento a no máximo 5 pastas simultâneas para evitar sobrecarga.
 
-exemplo para padrões:
-{
-    "from": "C:\Users\gilgi\OneDrive\Documentos\models\estudos\linguagens-tipadas\typescript-para-javascript\filebot\B",
-    "to": "C:\Users\gilgi\OneDrive\Documentos\models\estudos\linguagens-tipadas\typescript-para-javascript\filebot\A",
-    "pattern": "desafio"
-}
+⚙️ **2. Monitoramento automático (segundo plano)**
 
-exemplo para data de criação:
-{
-    "from": "C:\Users\gilgi\OneDrive\Documentos\models\estudos\linguagens-tipadas\typescript-para-javascript\filebot\B",
-    "to": "C:\Users\gilgi\OneDrive\Documentos\models\estudos\linguagens-tipadas\typescript-para-javascript\filebot\A",
-    "creationDate": ""
-}
+- Usar `chokidar` para monitorar alterações em tempo real nas pastas selecionadas.
+- Permitir ativar/desativar o monitoramento por pasta.
+- Quando ativo, mover automaticamente arquivos para a pasta de destino conforme critérios definidos (ex: extensão de arquivo).
+- O processo deve funcionar em segundo plano sem travar a UI.
 
-exemplo para data de modificação:
-{
-    "from": "C:\Users\gilgi\OneDrive\Documentos\models\estudos\linguagens-tipadas\typescript-para-javascript\filebot\B",
-    "to": "C:\Users\gilgi\OneDrive\Documentos\models\estudos\linguagens-tipadas\typescript-para-javascript\filebot\A",
-    "creationDate": ""
-}
+🧩 **3. Filtros e proteção contra erros**
 
-# Ignorar arquivos com base no nome
+- Permitir definir filtros por extensão (ex: `.js`).
+- Adicionar lista de arquivos ignorados (ex: `script.js`, `index.js`, `main.js`) para evitar exceções e comportamentos indesejados.
+- Garantir que o sistema continue estável mesmo com falhas ou acessos bloqueados.
 
-{
-    "from": "C:\Users\gilgi\OneDrive\Documentos\models\estudos\linguagens-tipadas\typescript-para-javascript\filebot\B",
-    "to": "C:\Users\gilgi\OneDrive\Documentos\models\estudos\linguagens-tipadas\typescript-para-javascript\filebot\A",
-    "extension": [".js"],
-    "ignore": ["scripts.js", "scripts.ts"]
-}
+💾 **4. Armazenamento e logs**
 
-# 📂 Organizador de Arquivos Automático
+- Usar `electron-store` para salvar configurações persistentes do usuário.
+- Usar `fs-extra` para manipulação de arquivos e pastas.
+- Usar `log4js` para registrar logs de ações, erros e eventos de monitoramento.
 
-## 🎯 Regras de Negócio
+🗄️ **5. Banco de dados local para regras do usuário**
 
-1. **Monitoramento em Tempo Real**: O aplicativo deve observar pastas específicas e reorganizar arquivos automaticamente conforme as regras definidas.
-2. **Organização por Critérios**: Os arquivos podem ser organizados por:
-   - Tipo (PDFs, imagens, vídeos, etc.).
-   - Data de criação/modificação.
-   - Nome ou padrões específicos.
-3. **Personalização pelo Usuário**: O usuário deve poder definir regras personalizadas para cada pasta.
-4. **Ações Automatizadas**: Além de mover arquivos, o app pode renomeá-los ou excluir duplicatas, conforme configuração.
-5. **Registro de Ações**: Manter um histórico das movimentações para fácil recuperação.
-6. **Modo Manual e Automático**: O usuário pode optar por organizar arquivos manualmente ou ativar a automação.
-7. **Proteção contra Erros**: Arquivos importantes podem ser marcados como protegidos para evitar movimentações erradas.
+- Integrar um banco de dados local para armazenar as regras de automação, filtros e histórico de ações.
+- Permitir escolher entre `sqlite3` (para operações mais robustas) ou `lowdb` (para configuração mais leve e simples).
+- Cada pasta monitorada deve ter suas próprias regras salvas e recuperáveis no banco.
+- Garantir compatibilidade com o empacotamento do Electron (o usuário não precisa instalar nada adicional).
+- Implementar função de backup/exportação do banco de dados em JSON.
 
----
+🧠 **Requisitos gerais**
 
-## 🔧 Requisitos Funcionais
-
-✅ Interface intuitiva para selecionar pastas e definir regras.  
-✅ Suporte a múltiplas pastas monitoradas simultaneamente.  
-✅ Opção para desfazer a última ação.  
-✅ Execução em segundo plano para não interferir na experiência do usuário.  
-✅ Logs de ações realizadas.  
-✅ Configuração de exceções (arquivos que não devem ser movidos).
-
----
-
-## 🖥 Requisitos Técnicos
-
-🔹 **Stack principal:** Electron.js + Node.js  
-🔹 **Bibliotecas sugeridas:**
-
-- `fs-extra` → Para manipulação de arquivos/pastas.
-- `chokidar` → Para monitoramento de arquivos em tempo real.
-- `electron-store` → Para salvar configurações do usuário.
-- `log4js` → Para gerar logs de ações.
-- `sqlite3` ou `lowdb` → Para armazenar regras definidas pelo usuário.
-
-# 📂 Organizador de Arquivos Automático
-
-## 🎯 Regras de Negócio
-
-1. **Monitoramento em Tempo Real**: O aplicativo deve observar pastas específicas e reorganizar arquivos automaticamente conforme as regras definidas.
-2. **Organização por Critérios**: Os arquivos podem ser organizados por:
-   - Tipo (PDFs, imagens, vídeos, etc.).
-   - Data de criação/modificação.
-   - Nome ou padrões específicos.
-3. **Personalização pelo Usuário**: O usuário deve poder definir regras personalizadas para cada pasta.
-4. **Ações Automatizadas**: Além de mover arquivos, o app pode renomeá-los ou excluir duplicatas, conforme configuração.
-5. **Registro de Ações**: Manter um histórico das movimentações para fácil recuperação.
-6. **Modo Manual e Automático**: O usuário pode optar por organizar arquivos manualmente ou ativar a automação.
-7. **Proteção contra Erros**: Arquivos importantes podem ser marcados como protegidos para evitar movimentações erradas.
-
----
-
-## 🔧 Requisitos Funcionais
-
-✅ Interface intuitiva para selecionar pastas e definir regras.  
-✅ Suporte a múltiplas pastas monitoradas simultaneamente.  
-✅ Opção para desfazer a última ação.  
-✅ Execução em segundo plano para não interferir na experiência do usuário.  
-✅ Logs de ações realizadas.  
-✅ Configuração de exceções (arquivos que não devem ser movidos).
-
----
-
-## 🖥 Requisitos Técnicos
-
-🔹 **Stack principal:** Electron.js + Node.js  
-🔹 **Bibliotecas sugeridas:**
-
-- `fs-extra` → Para manipulação de arquivos/pastas.
-- `chokidar` → Para monitoramento de arquivos em tempo real.
-- `electron-store` → Para salvar configurações do usuário.
-- `log4js` → Para gerar logs de ações.
-- `sqlite3` ou `lowdb` → Para armazenar regras definidas pelo usuário.
-
-
-# 📂 **FileBot - Organizador de Arquivos Automático**
-
-## **Visão Geral**
-
-O **FileBot** é um aplicativo de desktop desenvolvido com Electron.js e Node.js, projetado para organizar arquivos automaticamente em pastas específicas com base em critérios como tipo, data de criação/modificação, nome ou padrões. O objetivo é fornecer uma solução eficiente para organizar e manter os arquivos organizados, com a possibilidade de personalização de regras e monitoramento em tempo real das pastas.
-
----
-
-## **Regras de Negócio**
-
-1. **Monitoramento em Tempo Real**: O FileBot observa pastas específicas e reorganiza arquivos automaticamente conforme as regras definidas.
-2. **Organização por Critérios**: Arquivos podem ser organizados por:
-   - Tipo (ex: PDFs, imagens, vídeos).
-   - Data de criação/modificação.
-   - Nome ou padrões específicos.
-3. **Personalização pelo Usuário**: O usuário pode definir regras personalizadas para cada pasta.
-4. **Ações Automatizadas**: Mover, renomear ou excluir duplicatas conforme a configuração definida.
-5. **Registro de Ações**: Histórico completo das movimentações realizadas.
-6. **Modo Manual e Automático**: O usuário pode alternar entre a organização manual e a automática.
-7. **Proteção contra Erros**: Arquivos importantes podem ser marcados como protegidos para evitar movimentações erradas.
-
----
-
-## **Requisitos Funcionais**
-
-- Interface intuitiva para selecionar pastas e definir regras.
-- Suporte para monitoramento de múltiplas pastas simultaneamente.
-- Funcionalidade para desfazer a última ação.
-- Execução em segundo plano para não interferir na experiência do usuário.
-- Geração e armazenamento de logs de ações realizadas.
-- Configuração de exceções (arquivos que não devem ser movidos).
-
----
-
-## **Requisitos Técnicos**
-
-- **Stack principal**:
-
-  - **Electron.js**: Framework para desenvolvimento de desktop.
-  - **Node.js**: Para a lógica de back-end.
-
-- **Bibliotecas sugeridas**:
-  - **fs-extra**: Para manipulação de arquivos e pastas.
-  - **chokidar**: Para monitoramento de arquivos em tempo real.
-  - **electron-store**: Para salvar configurações do usuário.
-  - **log4js**: Para geração de logs de ações realizadas.
-  - **sqlite3** ou **lowdb**: Para armazenar regras e configurações do usuário.
-
-## **Funcionalidades**
-
-### **1. Monitoramento em Tempo Real**
-
-O FileBot permite o monitoramento de pastas específicas e reorganiza arquivos automaticamente conforme as regras definidas.
-
-Exemplo de configuração para monitoramento por tipo de arquivo:
-
-```json
-{
-  "from": "C:/Documents/test-folder",
-  "to": "C:/Documents/organized-folder",
-  "extension": [".pdf"]
-}
-```
-
-### **2. Organização por Critérios**
-
-O usuário pode configurar regras de organização baseadas em:
-
-- **Tipo de arquivo** (extensão).
-- **Data de criação**.
-- **Data de modificação**.
-- **Nome do arquivo** ou padrões específicos.
-
-### **3. Personalização de Regras**
-
-As regras de organização são definidas pelo usuário, e o FileBot pode aplicar essas regras automaticamente ou manualmente.
-
-### **4. Ações Automatizadas**
-
-As ações de organização podem ser configuradas para:
-
-- **Mover** arquivos.
-- **Renomear** arquivos.
-- **Excluir duplicatas**.
-
-### **5. Logs de Ações Realizadas**
-
-Todas as ações realizadas pelo FileBot são registradas em um log de atividades para fácil acompanhamento e recuperação.
-
----
-
-## **Exemplos de Configurações**
-
-- **Monitoramento por Extensão**:
-
-```json
-{
-  "from": "C:/Documents/test-folder",
-  "to": "C:/Documents/organized-folder",
-  "extension": [".pdf", ".jpg"]
-}
-```
-
-- **Monitoramento por Nome/Padrão**:
-
-```json
-{
-  "from": "C:/Documents/test-folder",
-  "to": "C:/Documents/organized-folder",
-  "pattern": "invoice"
-}
-```
-
-- **Monitoramento por Data de Criação**:
-
-```json
-{
-  "from": "C:/Documents/test-folder",
-  "to": "C:/Documents/organized-folder",
-  "creationDate": "2025-03-01"
-}
-```
-
----
-
-## **Tecnologias Utilizadas**
-
-- **Electron.js**: Framework para criar aplicativos de desktop com JavaScript, HTML e CSS.
-- **Node.js**: Ambiente de execução para JavaScript no back-end.
-- **fs-extra**: Biblioteca para facilitar a manipulação de arquivos e pastas.
-- **chokidar**: Biblioteca para monitoramento em tempo real de arquivos.
-- **log4js**: Biblioteca para geração de logs detalhados.
-- **sqlite3** ou **lowdb**: Bancos de dados para armazenar regras e configurações do usuário.
-
-## **Licença**
-
-Este projeto está licenciado sob a **MIT License** - veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+- Interface simples e responsiva em Electron.
+- Modularização do código (ex: monitor, config, database, logger, ui).
+- Código bem comentado e fácil de manter.
+- Interface intuitiva e leve usando o bootstrap e estilização nativa com css (caso precise).
+  """
+  
