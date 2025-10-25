@@ -2,7 +2,6 @@ const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('node:path');
 const started = require('electron-squirrel-startup');
 const { v4: uuidv4 } = require('uuid');
-
 const { logger, setMainWindow } = require('./utils/logger');
 const db = require('./utils/database');
 const monitor = require('./utils/monitor');
@@ -17,8 +16,8 @@ const createWindow = () => {
     height: 800,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false,
       contextIsolation: true,
+      nodeIntegration: false,
     },
   });
 
@@ -211,6 +210,13 @@ ipcMain.handle('export-folder-config', async (event, folderId) => {
   }
   return { success: false, message: 'Exportação cancelada.' };
 });
+
+function notifyHistoryUpdate(entry) {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win) {
+    win.webContents.send('history-updated', entry);
+  }
+}
 
 ipcMain.handle('import-folder-config', async () => {
   const { filePaths } = await dialog.showOpenDialog({

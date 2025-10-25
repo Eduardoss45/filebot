@@ -17,4 +17,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportFolderConfig: folderId => ipcRenderer.invoke('export-folder-config', folderId),
   backupDatabase: () => ipcRenderer.invoke('backup-database'),
   restoreDatabase: () => ipcRenderer.invoke('restore-database'),
+  onHistoryUpdated: callback => ipcRenderer.on('history-updated', (_, entry) => callback(entry)),
 });

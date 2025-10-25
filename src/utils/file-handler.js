@@ -21,7 +21,12 @@ const checkAndDeleteDuplicate = async (sourcePath, destinationPath, folderId) =>
       fse.stat(destinationPath).catch(() => null),
     ]);
 
-    if (!newStats || !existingStats || newStats.size !== existingStats.size) return false;
+    if (!newStats || !existingStats) {
+      logger.warn(`⚠️ Um dos arquivos não existe mais: ${sourcePath} ou ${destinationPath}`);
+      return false;
+    }
+
+    if (newStats.size !== existingStats.size) return false;
 
     const [newHash, existingHash] = await Promise.all([
       calculateFileHash(sourcePath),
@@ -57,6 +62,7 @@ const moveFile = async (sourcePath, destinationDir, folderId) => {
   let details = '';
 
   try {
+    await fse.ensureDir(destinationDir);
     if (await fse.pathExists(initialDestination)) {
       const isDuplicate = await checkAndDeleteDuplicate(sourcePath, initialDestination, folderId);
       if (isDuplicate) return;

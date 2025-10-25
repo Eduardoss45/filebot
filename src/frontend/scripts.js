@@ -16,22 +16,22 @@ document.addEventListener('DOMContentLoaded', () => {
   const recentToList = document.getElementById('recent-to-list');
   const importBtn = document.getElementById('import-btn');
   const addFolderBtn = document.getElementById('add-folder-btn');
+  const dayjs = window.dayjs;
+
+  let folders = [];
+  let pendingHistory = [];
+
+  const normalizePath = path => path.trim().replace(/\\/g, '/');
+  const isHistoryTabActive = () => historyTab.classList.contains('active');
 
   const completedForm = () => {
     const fields = addFolderForm.querySelectorAll('input:not([disabled]), select:not([disabled])');
-    for (const field of fields) {
-      if (field.id !== 'ignore-input' && field.value.trim() === '') return false;
-    }
-    return true;
+    return Array.from(fields).every(f => f.id === 'ignore-input' || f.value.trim() !== '');
   };
-
-  completedForm();
-
-  let folders = [];
 
   const renderFolders = () => {
     folderListDiv.innerHTML = '';
-    if (folders.length === 0) {
+    if (!folders.length) {
       folderListDiv.innerHTML =
         '<p class="text-center text-muted">Nenhuma pasta monitorada. Adicione uma para começar.</p>';
       return;
@@ -70,31 +70,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const renderHistory = history => {
     historyListDiv.innerHTML = '';
-    if (history.length === 0) {
+    if (!history.length) {
       historyListDiv.innerHTML =
         '<p class="text-center text-muted">Nenhum evento de arquivo registrado.</p>';
       return;
     }
-    history.forEach(entry => {
-      const item = document.createElement('a');
-      item.className = 'list-group-item list-group-item-action';
-      item.innerHTML = `
-            <div class="d-flex w-100 justify-content-between">
-                <h6 class="mb-1">${entry.fileName}</h6>
-                <small>${new Date(entry.timestamp).toLocaleString()}</small>
-            </div>
-            <p class="mb-1"><span class="badge bg-info">${entry.status}</span> <code>${
-        entry.sourcePath
-      }</code> → <code>${entry.destinationPath}</code></p>
-            <small>${entry.details || ''}</small>
-        `;
-      historyListDiv.appendChild(item);
-    });
+    history.forEach(entry => addHistoryEntry(entry, false));
+  };
+
+  const addHistoryEntry = (entry, prepend = true) => {
+    const item = document.createElement('a');
+    item.className = 'list-group-item list-group-item-action';
+    item.innerHTML = `
+      <div class="d-flex w-100 justify-content-between">
+        <h6 class="mb-1">${entry.fileName}</h6>
+        <small>${dayjs().utc().utcOffset(-3).format('DD/MM/YYYY HH:mm:ss')}</small>
+      </div>
+      <p class="mb-1"><span class="badge bg-info">${entry.status}</span> <code>${
+      entry.sourcePath
+    }</code> → <code>${entry.destinationPath}</code></p>
+      <small>${entry.details || ''}</small>
+    `;
+    if (prepend) historyListDiv.prepend(item);
+    else historyListDiv.appendChild(item);
+    historyListDiv.scrollTop = 0;
   };
 
   const renderRecentPaths = (paths, listElement, inputElement) => {
     listElement.innerHTML = '';
-    if (paths.length === 0) {
+    if (!paths.length) {
       listElement.innerHTML =
         '<li><a class="dropdown-item disabled" href="#">Nenhum caminho recente</a></li>';
       return;
@@ -123,6 +127,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const history = await window.electronAPI.getHistory();
     renderHistory(history);
   };
+
+  addFolderForm.addEventListener('input', () => {
+    addFolderBtn.disabled = !completedForm();
+  });
 
   selectFromBtn.addEventListener('click', async () => {
     const path = await window.electronAPI.selecionarPasta();
@@ -158,46 +166,36 @@ document.addEventListener('DOMContentLoaded', () => {
       ignore: document
         .getElementById('ignore-input')
         .value.split(',')
-        .filter(Boolean)
-        .map(item => item.trim()),
+        .map(i => i.trim())
+        .filter(Boolean),
     };
 
-    if (newFolder.from === newFolder.to) {
-      alert('A pasta de origem e destino não podem ser iguais.');
-      return;
-    }
+    if (newFolder.from === newFolder.to)
+      return alert('A pasta de origem e destino não podem ser iguais.');
 
-    const folders = await window.electronAPI.getFolders();
+    const existingFolders = await window.electronAPI.getFolders();
 
-    const normalizePath = path => path.trim().replace(/\\/g, '/');
+    if (
+      existingFolders.some(
+        f =>
+          normalizePath(f.from) === normalizePath(newFolder.from) &&
+          normalizePath(f.to) === normalizePath(newFolder.to) &&
+          f.rule.criteria === newFolder.rule.criteria &&
+          f.rule.value === newFolder.rule.value
+      )
+    )
+      return alert('Já existe uma regra idêntica para essas pastas.');
 
-    const exists = folders.some(
-      f =>
-        normalizePath(f.from) === normalizePath(newFolder.from) &&
-        normalizePath(f.to) === normalizePath(newFolder.to) &&
-        f.rule.criteria === newFolder.rule.criteria &&
-        f.rule.value === newFolder.rule.value
-    );
-
-    if (exists) {
-      alert('Já existe uma regra idêntica para essas pastas.');
-      return;
-    }
-
-    const opposite = folders.find(
-      f =>
-        f.from === newFolder.to &&
-        f.to === newFolder.from &&
-        f.rule.criteria === newFolder.rule.criteria &&
-        f.rule.value === newFolder.rule.value
-    );
-
-    if (opposite) {
-      alert(
-        `Já existe uma regra que faz o caminho inverso '${opposite.from}' para '${opposite.to}'.`
-      );
-      return;
-    }
+    if (
+      existingFolders.find(
+        f =>
+          f.from === newFolder.to &&
+          f.to === newFolder.from &&
+          f.rule.criteria === newFolder.rule.criteria &&
+          f.rule.value === newFolder.rule.value
+      )
+    )
+      return alert('Já existe uma regra que faz o caminho inverso.');
 
     await window.electronAPI.addFolder(newFolder);
     addFolderForm.reset();
@@ -209,23 +207,20 @@ document.addEventListener('DOMContentLoaded', () => {
   folderListDiv.addEventListener('click', async event => {
     const button = event.target.closest('button');
     if (!button) return;
-
     const folderId = button.dataset.id;
     const folder = folders.find(f => f.id === folderId);
+    if (!folder) return;
 
     if (button.classList.contains('start-stop-btn')) {
       const action = folder.monitoring ? 'stopMonitoring' : 'startMonitoring';
       const result = await window.electronAPI[action](folderId);
-      if (result.success) {
-        folder.monitoring = !folder.monitoring;
-        renderFolders();
-      } else {
-        alert(`Erro: ${result.message}`);
-      }
+      if (result.success) folder.monitoring = !folder.monitoring;
+      else alert(`Erro: ${result.message}`);
+      renderFolders();
     }
 
     if (button.classList.contains('delete-btn')) {
-      if (confirm(`Tem certeza que deseja excluir a regra "${folder.name}"?`)) {
+      if (confirm(`Tem certeza que deseja excluir "${folder.name}"?`)) {
         await window.electronAPI.removeFolder(folderId);
         loadFolders();
       }
@@ -233,82 +228,69 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (button.classList.contains('export-btn')) {
       const result = await window.electronAPI.exportFolderConfig(folderId);
-      if (result.success) {
-        alert(`Configuração exportada para: ${result.path}`);
-      } else {
-        alert(`Falha na exportação: ${result.message}`);
-      }
+      alert(
+        result.success ? `Configuração exportada para: ${result.path}` : `Falha: ${result.message}`
+      );
     }
   });
 
   importBtn.addEventListener('click', async () => {
     const importResult = await window.electronAPI.importFolderConfig();
-    if (!importResult.success) {
-      if (importResult.message !== 'Importação cancelada.') {
-        alert(`Falha na importação: ${importResult.message}`);
-      }
-      return;
-    }
+    if (!importResult.success)
+      return alert(
+        importResult.message !== 'Importação cancelada.' ? `Falha: ${importResult.message}` : ''
+      );
 
     const importedFolder = importResult.folder;
-    const folders = await window.electronAPI.getFolders();
+    const existingFolders = await window.electronAPI.getFolders();
 
-    const normalizePath = path => path.trim().replace(/\\/g, '/');
-
-    const duplicate = folders.some(
-      f =>
-        normalizePath(f.from) === normalizePath(importedFolder.from) &&
-        normalizePath(f.to) === normalizePath(importedFolder.to) &&
-        f.rule.criteria === importedFolder.rule.criteria &&
-        f.rule.value === importedFolder.rule.value
-    );
-
-    if (duplicate) {
-      alert(`A configuração "${importedFolder.name}" já existe e não será importada novamente.`);
-      return;
-    }
+    if (
+      existingFolders.some(
+        f =>
+          normalizePath(f.from) === normalizePath(importedFolder.from) &&
+          normalizePath(f.to) === normalizePath(importedFolder.to) &&
+          f.rule.criteria === importedFolder.rule.criteria &&
+          f.rule.value === importedFolder.rule.value
+      )
+    )
+      return alert(`A configuração "${importedFolder.name}" já existe.`);
 
     const addResult = await window.electronAPI.addFolder(importedFolder);
-    if (!addResult.success) {
-      alert(addResult.message);
-      return;
-    }
+    if (!addResult.success) return alert(addResult.message);
 
     alert(`Configuração "${importedFolder.name}" importada com sucesso!`);
     loadFolders();
   });
 
-  historyTab.addEventListener('shown.bs.tab', loadHistory);
-
   backupBtn.addEventListener('click', async () => {
     const result = await window.electronAPI.backupDatabase();
-    alert(
-      result.success ? `Backup salvo em: ${result.path}` : `Falha no backup: ${result.message}`
-    );
+    alert(result.success ? `Backup salvo em: ${result.path}` : `Falha: ${result.message}`);
   });
 
   restoreBtn.addEventListener('click', async () => {
-    if (
-      confirm('Restaurar um backup substituirá todas as configurações atuais. Deseja continuar?')
-    ) {
-      const result = await window.electronAPI.restoreDatabase();
-      if (result.success) {
-        alert('Backup restaurado com sucesso!');
-        loadFolders();
-        loadHistory();
-      } else {
-        alert(`Falha na restauração: ${result.message}`);
-      }
+    if (!confirm('Restaurar substituirá todas as configurações. Deseja continuar?')) return;
+    const result = await window.electronAPI.restoreDatabase();
+    alert(result.success ? 'Backup restaurado com sucesso!' : `Falha: ${result.message}`);
+    if (result.success) {
+      loadFolders();
+      loadHistory();
     }
   });
 
-  addFolderForm.addEventListener('input', () => {
-    addFolderBtn.disabled = !completedForm();
+  historyTab.addEventListener('shown.bs.tab', async () => {
+    await loadHistory();
+    pendingHistory.forEach(entry => addHistoryEntry(entry));
+    pendingHistory = [];
+  });
+
+  window.electronAPI.onHistoryUpdated(entry => {
+    if (isHistoryTabActive()) addHistoryEntry(entry);
+    else pendingHistory.push(entry);
   });
 
   const log = message => {
     const div = document.createElement('div');
-    div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+    div.textContent = `[${dayjs().utc().utcOffset(-3).format('DD/MM/YYYY HH:mm:ss')}] ${message}`;
     logsDiv.appendChild(div);
     logsDiv.scrollTop = logsDiv.scrollHeight;
   };
@@ -316,4 +298,6 @@ document.addEventListener('DOMContentLoaded', () => {
   window.electronAPI.onLogMessage(log);
 
   loadFolders();
+  loadHistory();
+  addFolderBtn.disabled = !completedForm();
 });
