@@ -140,7 +140,7 @@ const revertAction = async actionId => {
     };
   }
 
-  addRevertingFile(source_path); // Adiciona à lista de exceções
+  addRevertingFile(source_path);
 
   try {
     await fse.move(destination_path, source_path);
@@ -149,9 +149,12 @@ const revertAction = async actionId => {
     return { success: true, message: `Ação ${actionId} revertida com sucesso.` };
   } catch (error) {
     logger.error(`🚨 Erro ao reverter ação ${actionId}:`, error);
-    return { success: false, message: `Ocorreu um erro inesperado ao tentar reverter: ${error.message}` };
+    return {
+      success: false,
+      message: `Ocorreu um erro inesperado ao tentar reverter: ${error.message}`,
+    };
   } finally {
-    removeRevertingFile(source_path); // Garante que seja removido da lista
+    removeRevertingFile(source_path);
   }
 };
 

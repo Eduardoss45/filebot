@@ -87,11 +87,10 @@ document.addEventListener('DOMContentLoaded', () => {
       (entry.action_type === 'MOVE' || entry.action_type === 'RENAME_AND_MOVE') &&
       entry.status !== 'REVERTED';
 
-    // Adiciona destaque visual se a ação foi revertida ou movida
     if (entry.status === 'REVERTED') {
       item.classList.add('bg-secondary', 'text-white');
     } else if (entry.action_type === 'MOVE' || entry.action_type === 'RENAME_AND_MOVE') {
-      item.classList.add('bg-light'); // destaque para mover
+      item.classList.add('bg-light');
     }
 
     item.innerHTML = `
