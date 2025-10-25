@@ -11,7 +11,6 @@ const knex = require('knex')({
   useNullAsDefault: true,
 });
 
-// --- Database Initialization ---
 const initializeDatabase = async () => {
   try {
     const hasFoldersTable = await knex.schema.hasTable('folders');
@@ -53,8 +52,18 @@ const initializeDatabase = async () => {
       logger.info('Tabela "recent_paths" criada com sucesso.');
     }
 
-    const deleted = await knex('folders').where('ignore', '[object Object]').del();
+    const hasRulesTable = await knex.schema.hasTable('rules');
+    if (!hasRulesTable) {
+      await knex.schema.createTable('rules', table => {
+        table.increments('id').primary();
+        table.string('name').notNullable();
+        table.json('ignore');
+        table.timestamp('updated_at').defaultTo(knex.fn.now());
+      });
+      logger.info('Tabela "rules" criada com sucesso.');
+    }
 
+    const deleted = await knex('folders').where('ignore', '[object Object]').del();
     if (deleted) logger.info(`Removidos ${deleted} folders antigos com ignore inválido.`);
   } catch (error) {
     logger.error('Erro ao inicializar o banco de dados:', error);
@@ -62,14 +71,12 @@ const initializeDatabase = async () => {
   }
 };
 
-// --- Folder Operations ---
 const parseFolder = folder => ({
   ...folder,
   rule: typeof folder.rule === 'string' ? JSON.parse(folder.rule) : folder.rule,
   ignore: typeof folder.ignore === 'string' ? JSON.parse(folder.ignore) : folder.ignore,
 });
 
-// Salva folder garantindo JSON válido
 const addFolder = folder => {
   const safeFolder = {
     ...folder,
@@ -79,7 +86,6 @@ const addFolder = folder => {
   return knex('folders').insert(safeFolder);
 };
 
-// Atualiza folder garantindo JSON válido
 const updateFolder = (id, updates) => {
   const safeUpdates = {
     ...updates,
@@ -101,11 +107,9 @@ const getFolderById = async id => {
 
 const removeFolder = id => knex('folders').where({ id }).del();
 
-// --- History Operations ---
 const addHistory = entry => knex('history').insert(entry);
 const getHistory = () => knex('history').orderBy('timestamp', 'desc').limit(200);
 
-// --- Recent Paths ---
 const addRecentPath = async path => {
   try {
     await knex('recent_paths')
@@ -117,10 +121,34 @@ const addRecentPath = async path => {
   }
 };
 
+const saveRules = async rules => {
+  const safeRules = {
+    name: 'global',
+    ignore: JSON.stringify(rules.ignore ?? []),
+    update_at: new Date(),
+  };
+
+  await knex('rules').insert(safeRules).onConflict('name').merge(safeRules);
+
+  logger.info('Regras globais atualizadas com sucesso.');
+};
+
+const getRules = async () => {
+  const row = await knex('rules')
+    .where({
+      name: 'global',
+    })
+    .first();
+  if (!row) return { ignore: [] };
+  return {
+    ...row,
+    ignore: typeof row.ignore === 'string' ? JSON.parse(row.ignore) : row.ignore,
+  };
+};
+
 const getRecentPaths = () =>
   knex('recent_paths').orderBy('last_used', 'desc').limit(10).select('path');
 
-// --- Backup & Restore ---
 const backupDatabase = async filePath => {
   try {
     const backupData = {
@@ -167,4 +195,6 @@ module.exports = {
   restoreDatabase,
   addRecentPath,
   getRecentPaths,
+  saveRules,
+  getRules,
 };

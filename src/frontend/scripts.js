@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-  // * Seleção de elementos do DOM
   const addFolderForm = document.getElementById('add-folder-form');
   const fromPathInput = document.getElementById('from-path');
   const toPathInput = document.getElementById('to-path');
@@ -16,11 +15,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const recentFromList = document.getElementById('recent-from-list');
   const recentToList = document.getElementById('recent-to-list');
   const importBtn = document.getElementById('import-btn');
+  const addFolderBtn = document.getElementById('add-folder-btn');
 
-  // * Estado local
+  const completedForm = () => {
+    const fields = addFolderForm.querySelectorAll('input:not([disabled]), select:not([disabled])');
+    for (const field of fields) {
+      if (field.id !== 'ignore-input' && field.value.trim() === '') return false;
+    }
+    return true;
+  };
+
+  completedForm();
+
   let folders = [];
 
-  // * Funções de renderização
   const renderFolders = () => {
     folderListDiv.innerHTML = '';
     if (folders.length === 0) {
@@ -106,7 +114,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
-  // * Carregamento de dados
   const loadFolders = async () => {
     folders = await window.electronAPI.getFolders();
     renderFolders();
@@ -117,7 +124,6 @@ document.addEventListener('DOMContentLoaded', () => {
     renderHistory(history);
   };
 
-  // * Escuta de eventos
   selectFromBtn.addEventListener('click', async () => {
     const path = await window.electronAPI.selecionarPasta();
     if (path) fromPathInput.value = path;
@@ -137,9 +143,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const recentPaths = await window.electronAPI.getRecentPaths();
     renderRecentPaths(recentPaths, recentToList, toPathInput);
   });
-  // ! Verificar se o campo ignore está funcionando corretamente
+
   addFolderForm.addEventListener('submit', async event => {
     event.preventDefault();
+
     const newFolder = {
       name: document.getElementById('folder-name').value,
       from: fromPathInput.value,
@@ -154,6 +161,44 @@ document.addEventListener('DOMContentLoaded', () => {
         .filter(Boolean)
         .map(item => item.trim()),
     };
+
+    if (newFolder.from === newFolder.to) {
+      alert('A pasta de origem e destino não podem ser iguais.');
+      return;
+    }
+
+    const folders = await window.electronAPI.getFolders();
+
+    const normalizePath = path => path.trim().replace(/\\/g, '/');
+
+    const exists = folders.some(
+      f =>
+        normalizePath(f.from) === normalizePath(newFolder.from) &&
+        normalizePath(f.to) === normalizePath(newFolder.to) &&
+        f.rule.criteria === newFolder.rule.criteria &&
+        f.rule.value === newFolder.rule.value
+    );
+
+    if (exists) {
+      alert('Já existe uma regra idêntica para essas pastas.');
+      return;
+    }
+
+    const opposite = folders.find(
+      f =>
+        f.from === newFolder.to &&
+        f.to === newFolder.from &&
+        f.rule.criteria === newFolder.rule.criteria &&
+        f.rule.value === newFolder.rule.value
+    );
+
+    if (opposite) {
+      alert(
+        `Já existe uma regra que faz o caminho inverso '${opposite.from}' para '${opposite.to}'.`
+      );
+      return;
+    }
+
     await window.electronAPI.addFolder(newFolder);
     addFolderForm.reset();
     fromPathInput.value = '';
@@ -172,7 +217,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const action = folder.monitoring ? 'stopMonitoring' : 'startMonitoring';
       const result = await window.electronAPI[action](folderId);
       if (result.success) {
-        // Update local state and re-render for immediate feedback
         folder.monitoring = !folder.monitoring;
         renderFolders();
       } else {
@@ -198,13 +242,40 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   importBtn.addEventListener('click', async () => {
-    const result = await window.electronAPI.importFolderConfig();
-    if (result.success) {
-      alert(`Configuração "${result.folder.name}" importada com sucesso!`);
-      loadFolders();
-    } else if (result.message !== 'Importação cancelada.') {
-      alert(`Falha na importação: ${result.message}`);
+    const importResult = await window.electronAPI.importFolderConfig();
+    if (!importResult.success) {
+      if (importResult.message !== 'Importação cancelada.') {
+        alert(`Falha na importação: ${importResult.message}`);
+      }
+      return;
     }
+
+    const importedFolder = importResult.folder;
+    const folders = await window.electronAPI.getFolders();
+
+    const normalizePath = path => path.trim().replace(/\\/g, '/');
+
+    const duplicate = folders.some(
+      f =>
+        normalizePath(f.from) === normalizePath(importedFolder.from) &&
+        normalizePath(f.to) === normalizePath(importedFolder.to) &&
+        f.rule.criteria === importedFolder.rule.criteria &&
+        f.rule.value === importedFolder.rule.value
+    );
+
+    if (duplicate) {
+      alert(`A configuração "${importedFolder.name}" já existe e não será importada novamente.`);
+      return;
+    }
+
+    const addResult = await window.electronAPI.addFolder(importedFolder);
+    if (!addResult.success) {
+      alert(addResult.message);
+      return;
+    }
+
+    alert(`Configuração "${importedFolder.name}" importada com sucesso!`);
+    loadFolders();
   });
 
   historyTab.addEventListener('shown.bs.tab', loadHistory);
@@ -231,7 +302,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // --- Logging ---
+  addFolderForm.addEventListener('input', () => {
+    addFolderBtn.disabled = !completedForm();
+  });
+
   const log = message => {
     const div = document.createElement('div');
     div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
@@ -241,6 +315,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
   window.electronAPI.onLogMessage(log);
 
-  // --- Initial Load ---
   loadFolders();
 });

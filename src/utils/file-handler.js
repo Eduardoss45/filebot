@@ -2,42 +2,42 @@ const fse = require('fs-extra');
 const crypto = require('crypto');
 const path = require('path');
 const { logger } = require('./logger');
-const db = require('./database'); // Import database module
+const db = require('./database');
 
-const calcularHashArquivo = (filePath) => {
+const calculateFileHash = filePath => {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash('sha256');
     const stream = fse.createReadStream(filePath);
-    stream.on('data', (data) => hash.update(data));
+    stream.on('data', data => hash.update(data));
     stream.on('end', () => resolve(hash.digest('hex')));
-    stream.on('error', (err) => reject(err));
+    stream.on('error', err => reject(err));
   });
 };
 
-const verificarEExcluirDuplicata = async (filePath, destinoInicial, folderId) => {
+const checkAndDeleteDuplicate = async (sourcePath, destinationPath, folderId) => {
   try {
-    const [statsNovo, statsExistente] = await Promise.all([
-      fse.stat(filePath).catch(() => null),
-      fse.stat(destinoInicial).catch(() => null),
+    const [newStats, existingStats] = await Promise.all([
+      fse.stat(sourcePath).catch(() => null),
+      fse.stat(destinationPath).catch(() => null),
     ]);
 
-    if (!statsNovo || !statsExistente || statsNovo.size !== statsExistente.size) return false;
+    if (!newStats || !existingStats || newStats.size !== existingStats.size) return false;
 
-    const [hashNovo, hashExistente] = await Promise.all([
-      calcularHashArquivo(filePath),
-      calcularHashArquivo(destinoInicial),
+    const [newHash, existingHash] = await Promise.all([
+      calculateFileHash(sourcePath),
+      calculateFileHash(destinationPath),
     ]);
 
-    if (hashNovo && hashNovo === hashExistente) {
-      logger.info(`🗑️ Arquivo duplicado encontrado! Excluindo ${filePath}...`);
-      await fse.unlink(filePath);
+    if (newHash && newHash === existingHash) {
+      logger.info(`🗑️ Arquivo duplicado encontrado! Excluindo ${sourcePath}...`);
+      await fse.unlink(sourcePath);
       await db.addHistory({
-          folderId,
-          fileName: path.basename(filePath),
-          sourcePath: filePath,
-          destinationPath: destinoInicial,
-          status: 'DUPLICATE_DELETED',
-          details: 'Arquivo duplicado idêntico foi removido da origem.'
+        folderId,
+        fileName: path.basename(sourcePath),
+        sourcePath,
+        destinationPath,
+        status: 'DUPLICATE_DELETED',
+        details: 'Arquivo duplicado idêntico foi removido da origem.',
       });
       return true;
     }
@@ -45,66 +45,59 @@ const verificarEExcluirDuplicata = async (filePath, destinoInicial, folderId) =>
     logger.error(`🚨 Erro ao comparar arquivos: ${err}`);
   }
   return false;
-}
+};
 
-const moverArquivo = async (filePath, to, folderId) => {
-  const fileName = path.basename(filePath);
-  const fileExt = path.extname(filePath);
-  const fileBaseName = path.basename(filePath, fileExt);
+const moveFile = async (sourcePath, destinationDir, folderId) => {
+  const fileName = path.basename(sourcePath);
+  const fileExt = path.extname(sourcePath);
+  const baseName = path.basename(sourcePath, fileExt);
 
-  let destinoInicial = path.join(to, fileName);
+  let initialDestination = path.join(destinationDir, fileName);
   let status = 'MOVED';
   let details = '';
 
   try {
-    // If a file with the same name already exists in the destination,
-    // check if it's a duplicate. If so, delete the source file.
-    if (await fse.pathExists(destinoInicial)) {
-      if (await verificarEExcluirDuplicata(filePath, destinoInicial, folderId)) return; // Stop if duplicate was deleted
+    if (await fse.pathExists(initialDestination)) {
+      const isDuplicate = await checkAndDeleteDuplicate(sourcePath, initialDestination, folderId);
+      if (isDuplicate) return;
     }
 
-    // If the destination path already exists, find a new name by appending a number.
-    let newPath = destinoInicial;
+    let finalPath = initialDestination;
     let count = 1;
-    while (await fse.pathExists(newPath)) {
-      newPath = path.join(to, `${fileBaseName} (${count})${fileExt}`);
+    while (await fse.pathExists(finalPath)) {
+      finalPath = path.join(destinationDir, `${baseName} (${count})${fileExt}`);
       count++;
     }
 
-    // If the file was renamed, update the status and details.
-    if (newPath !== destinoInicial) {
-        status = 'RENAMED_AND_MOVED';
-        details = `Arquivo renomeado para ${path.basename(newPath)} para evitar conflito.`;
+    if (finalPath !== initialDestination) {
+      status = 'RENAMED_AND_MOVED';
+      details = `Arquivo renomeado para ${path.basename(finalPath)} para evitar conflito.`;
     }
 
-    // Move the file to the new path.
-    await fse.move(filePath, newPath);
-    logger.info(`🚀 Movendo ${fileName} para ${newPath}`);
+    await fse.move(sourcePath, finalPath);
+    logger.info(`🚀 Movendo ${fileName} para ${finalPath}`);
 
-    // Add a record of the move to the history database.
     await db.addHistory({
-        folderId,
-        fileName: path.basename(newPath),
-        sourcePath: filePath,
-        destinationPath: newPath,
-        status,
-        details
+      folderId,
+      fileName: path.basename(finalPath),
+      sourcePath,
+      destinationPath: finalPath,
+      status,
+      details,
     });
-
   } catch (err) {
     logger.error(`🚨 Erro ao mover ${fileName}: ${err}`);
-    // If an error occurs, log it to the history database.
     await db.addHistory({
-        folderId,
-        fileName,
-        sourcePath: filePath,
-        destinationPath: to,
-        status: 'ERROR',
-        details: err.message
+      folderId,
+      fileName,
+      sourcePath,
+      destinationPath: destinationDir,
+      status: 'ERROR',
+      details: err.message,
     });
   }
 };
 
 module.exports = {
-  moverArquivo,
+  moveFile,
 };
