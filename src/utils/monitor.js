@@ -4,6 +4,8 @@ const { moveFile } = require('./file-handler');
 const path = require('path');
 const fs = require('fs');
 
+const { isReverting, removeRevertingFile } = require('./revert-state');
+
 const activeWatchers = new Map();
 const MAX_WATCHERS = 5;
 
@@ -66,6 +68,12 @@ const startMonitoring = folder => {
   });
 
   watcher.on('add', async filePath => {
+    if (isReverting(filePath)) {
+      logger.info(`🔄 Ignorando arquivo revertido: ${filePath}`);
+      removeRevertingFile(filePath);
+      return;
+    }
+
     logger.info(`Item detectado: ${filePath}`);
     try {
       const stats = await fs.promises.stat(filePath);

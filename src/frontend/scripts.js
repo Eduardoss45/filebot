@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const dayjs = window.dayjs;
 
   let folders = [];
+  let fullHistory = [];
   let pendingHistory = [];
 
   const normalizePath = path => path.trim().replace(/\\/g, '/');
@@ -79,21 +80,45 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const addHistoryEntry = (entry, prepend = true) => {
-    const item = document.createElement('a');
+    const item = document.createElement('div');
     item.className = 'list-group-item list-group-item-action';
+
+    const canRevert =
+      (entry.action_type === 'MOVE' || entry.action_type === 'RENAME_AND_MOVE') &&
+      entry.status !== 'REVERTED';
+
+    // Adiciona destaque visual se a ação foi revertida ou movida
+    if (entry.status === 'REVERTED') {
+      item.classList.add('bg-secondary', 'text-white');
+    } else if (entry.action_type === 'MOVE' || entry.action_type === 'RENAME_AND_MOVE') {
+      item.classList.add('bg-light'); // destaque para mover
+    }
+
     item.innerHTML = `
-      <div class="d-flex w-100 justify-content-between">
-        <h6 class="mb-1">${entry.fileName}</h6>
-        <small>${dayjs().utc().utcOffset(-3).format('DD/MM/YYYY HH:mm:ss')}</small>
-      </div>
-      <p class="mb-1"><span class="badge bg-info">${entry.status}</span> <code>${
-      entry.sourcePath
-    }</code> → <code>${entry.destinationPath}</code></p>
-      <small>${entry.details || ''}</small>
-    `;
-    if (prepend) historyListDiv.prepend(item);
-    else historyListDiv.appendChild(item);
-    historyListDiv.scrollTop = 0;
+    <div class="d-flex w-100 justify-content-between">
+      <h6 class="mb-1">${entry.action_type}</h6>
+      <small>${dayjs(entry.timestamp).utc().utcOffset(-3).format('DD/MM/YYYY HH:mm:ss')}</small>
+    </div>
+    <p class="mb-1"><code>${entry.source_path}</code> → <code>${entry.destination_path}</code></p>
+    <small>${entry.details || ''}</small>
+    ${
+      canRevert
+        ? `<button class="btn btn-sm btn-outline-warning mt-2 revert-btn" data-id="${entry.id}">Reverter</button>`
+        : ''
+    }
+    ${
+      entry.status === 'REVERTED'
+        ? '<span class="badge bg-secondary float-end">Revertido</span>'
+        : ''
+    }
+  `;
+
+    if (prepend) {
+      historyListDiv.prepend(item);
+      historyListDiv.scrollTop = 0;
+    } else {
+      historyListDiv.appendChild(item);
+    }
   };
 
   const renderRecentPaths = (paths, listElement, inputElement) => {
@@ -124,9 +149,31 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const loadHistory = async () => {
-    const history = await window.electronAPI.getHistory();
-    renderHistory(history);
+    fullHistory = await window.electronAPI.getActionHistory();
+    renderHistory(fullHistory);
   };
+
+  historyListDiv.addEventListener('click', async event => {
+    if (event.target.classList.contains('revert-btn')) {
+      const actionId = event.target.dataset.id;
+      if (confirm('Tem certeza que deseja reverter esta ação?')) {
+        const result = await window.electronAPI.revertAction(actionId);
+        alert(result.message);
+        if (result.success) {
+          const revertedEntry = await window.electronAPI.getActionById(actionId);
+          if (revertedEntry) {
+            const itemToUpdate = document
+              .querySelector(`.revert-btn[data-id="${actionId}"]`)
+              .closest('.list-group-item');
+            if (itemToUpdate) {
+              addHistoryEntry(revertedEntry, true);
+              itemToUpdate.remove();
+            }
+          }
+        }
+      }
+    }
+  });
 
   addFolderForm.addEventListener('input', () => {
     addFolderBtn.disabled = !completedForm();

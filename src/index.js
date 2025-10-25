@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const { logger, setMainWindow } = require('./utils/logger');
 const db = require('./utils/database');
 const monitor = require('./utils/monitor');
+const { revertAction } = require('./utils/file-handler');
 
 if (started) {
   app.quit();
@@ -158,7 +159,8 @@ ipcMain.handle('stop-monitoring', async (event, folderId) => {
   return { success: true, message: `Monitoramento para ID ${folderId} foi interrompido.` };
 });
 
-ipcMain.handle('get-history', () => db.getHistory());
+ipcMain.handle('get-action-history', () => db.getActionHistory());
+ipcMain.handle('get-action-by-id', (event, actionId) => db.getActionById(actionId));
 ipcMain.handle('get-recent-paths', () => db.getRecentPaths());
 
 ipcMain.handle('backup-database', async () => {
@@ -269,4 +271,9 @@ ipcMain.handle('import-folder-config', async () => {
     logger.error('Erro ao importar configuração da pasta:', error);
     return { success: false, message: error.message };
   }
+});
+
+ipcMain.handle('revert-action', async (event, actionId) => {
+  const result = await revertAction(actionId);
+  return result;
 });

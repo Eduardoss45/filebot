@@ -27,19 +27,19 @@ const initializeDatabase = async () => {
       logger.info('Tabela "folders" criada com sucesso.');
     }
 
-    const hasHistoryTable = await knex.schema.hasTable('history');
+    const hasHistoryTable = await knex.schema.hasTable('action_history');
     if (!hasHistoryTable) {
-      await knex.schema.createTable('history', table => {
+      await knex.schema.createTable('action_history', table => {
         table.increments('id').primary();
-        table.timestamp('timestamp').defaultTo(knex.fn.now());
         table.string('folderId').references('id').inTable('folders').onDelete('CASCADE');
-        table.string('fileName');
-        table.string('sourcePath');
-        table.string('destinationPath');
-        table.string('status');
-        table.text('details');
+        table.string('action_type').notNullable(); // e.g., 'MOVE', 'RENAME'
+        table.string('source_path').notNullable();
+        table.string('destination_path').notNullable();
+        table.string('status').defaultTo('COMPLETED'); // 'COMPLETED', 'REVERTED'
+        table.string('details');
+        table.timestamp('timestamp').defaultTo(knex.fn.now());
       });
-      logger.info('Tabela "history" criada com sucesso.');
+      logger.info('Tabela "action_history" criada com sucesso.');
     }
 
     const hasRecentPathsTable = await knex.schema.hasTable('recent_paths');
@@ -107,8 +107,10 @@ const getFolderById = async id => {
 
 const removeFolder = id => knex('folders').where({ id }).del();
 
-const addHistory = entry => knex('history').insert(entry);
-const getHistory = () => knex('history').orderBy('timestamp', 'desc').limit(200);
+const addActionHistory = entry => knex('action_history').insert(entry);
+const getActionHistory = () => knex('action_history').orderBy('timestamp', 'desc').limit(200);
+const getActionById = actionId =>
+  knex('action_history').where({ id: actionId }).first();
 
 const addRecentPath = async path => {
   try {
@@ -153,7 +155,7 @@ const backupDatabase = async filePath => {
   try {
     const backupData = {
       folders: await knex('folders').select('*'),
-      history: await knex('history').select('*'),
+      action_history: await knex('action_history').select('*'),
     };
     await fse.writeJson(filePath, backupData, { spaces: 2 });
     logger.info(`Backup do banco de dados criado com sucesso em: ${filePath}`);
@@ -168,11 +170,11 @@ const restoreDatabase = async filePath => {
   try {
     const backupData = await fse.readJson(filePath);
     await knex.transaction(async trx => {
-      await trx('history').del();
+      await trx('action_history').del();
       await trx('folders').del();
 
       if (backupData.folders?.length) await trx('folders').insert(backupData.folders);
-      if (backupData.history?.length) await trx('history').insert(backupData.history);
+      if (backupData.action_history?.length) await trx('action_history').insert(backupData.action_history);
     });
     logger.info(`Banco de dados restaurado com sucesso de: ${filePath}`);
     return { success: true };
@@ -183,14 +185,16 @@ const restoreDatabase = async filePath => {
 };
 
 module.exports = {
+  knex,
   initializeDatabase,
   getFolders,
   addFolder,
   updateFolder,
   removeFolder,
   getFolderById,
-  addHistory,
-  getHistory,
+  addActionHistory,
+  getActionHistory,
+  getActionById,
   backupDatabase,
   restoreDatabase,
   addRecentPath,

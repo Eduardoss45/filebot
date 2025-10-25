@@ -42,8 +42,8 @@ The FileBot is an application designed to automate the organization of files wit
 2. **Multi-Folder Support:**
    The system supports monitoring multiple directories simultaneously.
 
-3. **Undo Actions:**
-   Users can undo the most recent action performed by the system.
+3. **Action Reversion:**
+   Users can revert specific `move` or `rename` actions directly from the history tab. The system performs safety checks to ensure a revert is possible (e.g., the destination file still exists and the original path is clear). If a revert cannot be performed safely, a descriptive message is shown to the user.
 
 4. **Background Execution:**
    The application can run in the background without user intervention.
